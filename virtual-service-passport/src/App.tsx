@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
@@ -8,7 +8,7 @@ import { CarDetail } from './pages/CarDetail';
 import { AddCar } from './pages/AddCar';
 import { Settings } from './pages/Settings';
 import { AuthProvider, useAuth } from './lib/auth';
-import { LogOut, Car, Loader2 } from 'lucide-react';
+import { Settings as SettingsIcon, LogOut, Car, Loader2 } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +46,13 @@ function Header() {
           ) : user ? (
             <>
               <span className="text-slate-300 text-sm">Welcome, {userName}</span>
+              <Link
+                to="/settings"
+                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <SettingsIcon className="w-4 h-4" />
+                Settings
+              </Link>
               <button
                 onClick={handleSignOut}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
