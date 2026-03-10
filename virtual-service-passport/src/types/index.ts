@@ -98,3 +98,33 @@ export interface CarWithPermission extends Car {
   serviceCount?: number;
   nextReminder?: Reminder;
 }
+
+// DVLA MOT History types
+export interface MOTDefect {
+  type: 'dangerous' | 'major' | 'minor';
+  description: string;
+  item: string;
+  location: string;
+}
+
+export interface MOTTest {
+  testDate: string;
+  testResult: 'PASSED' | 'FAILED' | 'ABANDONED';
+  expiryDate: string | null;
+  mileage: number;
+  mileageUnit: 'km' | 'miles';
+  testNumber: string;
+  defects: MOTDefect[];
+}
+
+export interface MOTHistory {
+  registration: string;
+  make: string | null;
+  model: string | null;
+  firstUsedDate: string | null;
+  fuelType: string | null;
+  primaryColour: string | null;
+  vin: string | null;
+  vehicleId: string | null;
+  motTests: MOTTest[];
+}

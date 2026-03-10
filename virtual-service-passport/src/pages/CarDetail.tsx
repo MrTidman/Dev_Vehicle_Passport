@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
 import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership } from '../lib/cars';
+import { fetchMOTHistory, getMOTStatus } from '../lib/dvla';
 import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send } from 'lucide-react';
 
 // Service Record Form Schema
@@ -46,7 +47,11 @@ export function CarDetail() {
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
-
+  
+  // For now, user is always owner if they can see the car
+  const userRole = 'owner';
+  void showTransferForm; // Used in the template
+  
   // Fetch car details
   const { data: car, isLoading: carLoading, error: carError } = useQuery({
     queryKey: ['car', carId],
@@ -67,6 +72,18 @@ export function CarDetail() {
     queryFn: () => getReminders(carId!),
     enabled: !!carId,
   });
+
+  // Fetch MOT history
+  const { data: motHistory } = useQuery({
+    queryKey: ['motHistory', car?.registration],
+    queryFn: () => fetchMOTHistory(car!.registration || ''),
+    enabled: false, // Only fetch on demand
+  });
+
+  // Compute MOT status
+  if (motHistory) {
+    getMOTStatus(motHistory);
+  }
 
   // Add service record mutation
   const addServiceMutation = useMutation({
@@ -592,6 +609,70 @@ export function CarDetail() {
               <p className="text-slate-500 text-center py-8">No reminders set</p>
             )}
           </div>
+
+          {/* Transfer Ownership */}
+          {userRole === 'owner' && (
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 mt-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <UserPlus className="w-6 h-6 text-emerald-400" />
+                  <h2 className="text-xl font-semibold text-white">Transfer Ownership</h2>
+                </div>
+                <button
+                  onClick={() => setShowTransferForm(!showTransferForm)}
+                  className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Transfer
+                </button>
+              </div>
+
+              {showTransferForm && (
+                <>
+                  {transferSuccess ? (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                      <p className="text-emerald-400 text-sm">{transferSuccess}</p>
+                      <p className="text-slate-400 text-xs mt-2">Copy this link and send it to the new owner.</p>
+                    </div>
+                  ) : (
+                    <form
+                      onSubmit={transferForm.handleSubmit((data) => transferMutation.mutate(data))}
+                      className="p-4 bg-slate-900/50 border border-slate-600 rounded-lg space-y-4"
+                    >
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">New Owner's Email *</label>
+                        <input
+                          type="email"
+                          {...transferForm.register('newOwnerEmail')}
+                          placeholder="newowner@email.com"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm"
+                        />
+                        {transferForm.formState.errors.newOwnerEmail && (
+                          <p className="text-red-400 text-xs mt-1">{transferForm.formState.errors.newOwnerEmail.message}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={transferMutation.isPending}
+                          className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {transferMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Send Transfer'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowTransferForm(false)}
+                          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
