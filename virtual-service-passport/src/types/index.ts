@@ -17,6 +17,7 @@ export interface Car {
   engine_cc: number | null;
   colour: string | null;
   owner_id: string;
+  created_by: string;
   created_at: string;
 }
 
