@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth';
 import { addCar } from '../lib/cars';
 import { Car, Loader2 } from 'lucide-react';
@@ -22,6 +23,7 @@ type CarFormData = z.infer<typeof carSchema>;
 export function AddCar() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -44,6 +46,7 @@ export function AddCar() {
 
     try {
       await addCar(data, user.id);
+      queryClient.invalidateQueries({ queryKey: ['cars', user.id] });
       navigate('/dashboard');
     } catch (error: any) {
       setServerError(error.message || 'Failed to add car. Please try again.');
