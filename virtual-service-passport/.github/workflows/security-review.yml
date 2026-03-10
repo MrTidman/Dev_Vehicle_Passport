@@ -1,0 +1,90 @@
+name: Security Review
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    name: Security Review
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check for exposed secrets in env vars
+        run: |
+          echo "=== Checking for process.env (should use import.meta.env) ==="
+          if grep -r "process\.env" src/ 2>/dev/null | grep -v "import.meta.env" | grep -v "node_modules"; then
+            echo "❌ Found process.env usage - use import.meta.env for Vite"
+            exit 1
+          fi
+          echo "✓ No process.env found"
+      
+      - name: Check for XSS risks
+        run: |
+          echo "=== Checking for dangerouslySetInnerHTML ==="
+          if grep -r "dangerouslySetInnerHTML" src/ 2>/dev/null | grep -v "node_modules"; then
+            echo "❌ Found dangerouslySetInnerHTML - potential XSS risk"
+            exit 1
+          fi
+          echo "✓ No dangerouslySetInnerHTML found"
+      
+      - name: Check for localStorage with sensitive data
+        run: |
+          echo "=== Checking localStorage usage ==="
+          if grep -r "localStorage" src/ 2>/dev/null | grep -v "node_modules" | grep -v "supabase"; then
+            echo "⚠️ Found localStorage - ensure no sensitive data stored"
+          else
+            echo "✓ No localStorage with sensitive data"
+          fi
+      
+      - name: Check .env is gitignored
+        run: |
+          echo "=== Checking .env is gitignored ==="
+          if grep -q "^\.env$" .gitignore 2>/dev/null; then
+            echo "✓ .env is gitignored"
+          else
+            echo "⚠️ .env not in .gitignore"
+          fi
+      
+      - name: Run TypeScript check
+        run: npm run typecheck || true
+      
+      - name: Run lint
+        run: npm run lint || true
+
+  build:
+    runs-on: ubuntu-latest
+    name: Build Check
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build app
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
