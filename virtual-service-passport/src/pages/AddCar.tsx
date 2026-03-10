@@ -46,7 +46,9 @@ export function AddCar() {
 
     try {
       await addCar(data, user.id);
-      queryClient.invalidateQueries({ queryKey: ['cars', user.id] });
+      await queryClient.invalidateQueries({ queryKey: ['cars'] });
+      // Wait a bit for the cache to update
+      await new Promise(resolve => setTimeout(resolve, 100));
       navigate('/dashboard');
     } catch (error: any) {
       setServerError(error.message || 'Failed to add car. Please try again.');

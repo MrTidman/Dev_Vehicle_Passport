@@ -11,6 +11,8 @@ export function Dashboard() {
     queryKey: ['cars', user?.id],
     queryFn: () => getUserCars(user!.id),
     enabled: !!user,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
   if (isLoading) {
