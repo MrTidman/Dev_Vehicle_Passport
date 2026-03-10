@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
-import { User, Mail, Loader2, Save, Check } from 'lucide-react';
+import { User, Mail, Loader2, Save, Check, ArrowLeft, KeyRound } from 'lucide-react';
 
 const settingsSchema = z.object({
   full_name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
@@ -18,6 +19,8 @@ export function Settings() {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordSent, setResetPasswordSent] = useState(false);
 
   const {
     register,
@@ -64,6 +67,29 @@ export function Settings() {
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (!user?.email) return;
+    
+    setResetPasswordLoading(true);
+    setResetPasswordSent(false);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+      
+      setResetPasswordSent(true);
+      setSuccessMessage('Password reset email sent! Check your inbox for instructions.');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      setSuccessMessage('Error sending reset email. Please try again.');
+    } finally {
+      setResetPasswordLoading(false);
+    }
+  };
+
   if (!user) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-8">
@@ -76,6 +102,14 @@ export function Settings() {
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-8">
+      {/* Back Link */}
+      <div className="mb-6">
+        <Link to="/dashboard" className="text-emerald-400 hover:underline flex items-center gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Dashboard
+        </Link>
+      </div>
+
       <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
       <p className="text-slate-400 mb-8">Manage your account and preferences</p>
 
@@ -159,6 +193,41 @@ export function Settings() {
               {user.email_confirmed_at ? 'Verified' : 'Pending'}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Password Reset */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 mt-6">
+        <div className="flex items-center gap-3 mb-6">
+          <KeyRound className="w-6 h-6 text-emerald-400" />
+          <h2 className="text-xl font-semibold text-white">Password</h2>
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm">
+            Reset your password by receiving a password reset link to your email address.
+          </p>
+          
+          {resetPasswordSent && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+              <p className="text-emerald-400 text-sm">
+                Password reset email sent to {user.email}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handlePasswordReset}
+            disabled={resetPasswordLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {resetPasswordLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <KeyRound className="w-4 h-4" />
+            )}
+            Send Password Reset Email
+          </button>
         </div>
       </div>
     </div>

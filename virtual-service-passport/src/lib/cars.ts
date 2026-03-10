@@ -1,6 +1,15 @@
 import { supabase } from './supabase';
 import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval } from '../types';
 
+function generateToken(length: number = 32): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  for (let i = 0; i < length; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+}
+
 export async function getUserCars(userId: string): Promise<Car[]> {
   // First get car_ids user has permissions for
   const { data: permissions, error: permError } = await supabase
@@ -175,4 +184,117 @@ export async function completeReminder(reminderId: string): Promise<Reminder> {
 
   if (error) throw error;
   return data;
+}
+
+// Ownership Transfer
+export interface OwnershipTransfer {
+  id: string;
+  car_id: string;
+  seller_id: string;
+  new_owner_email: string;
+  token: string;
+  accepted: boolean;
+  created_at: string;
+  accepted_at?: string;
+}
+
+export async function transferOwnership(
+  carId: string,
+  newOwnerEmail: string,
+  sellerId: string
+): Promise<{ transfer: OwnershipTransfer; emailLink: string }> {
+  // Generate unique token
+  const token = generateToken(32);
+  
+  // Save transfer request to ownership_transfers table
+  const { data: transfer, error: transferError } = await supabase
+    .from('ownership_transfers')
+    .insert({
+      car_id: carId,
+      seller_id: sellerId,
+      new_owner_email: newOwnerEmail,
+      token: token,
+      accepted: false,
+    })
+    .select()
+    .single();
+
+  if (transferError) throw transferError;
+
+  // Generate email link (for now just log it since we don't have email sending)
+  const emailLink = `${window.location.origin}/transfer/${token}`;
+  
+  console.log('=== OWNERSHIP TRANSFER EMAIL ===');
+  console.log(`To: ${newOwnerEmail}`);
+  console.log(`Subject: Vehicle Transfer Request`);
+  console.log(`Message: Someone wants to transfer a vehicle to you. Click here to accept: ${emailLink}`);
+  console.log('================================');
+
+  return { transfer, emailLink };
+}
+
+export async function getTransferByToken(token: string): Promise<OwnershipTransfer | null> {
+  const { data, error } = await supabase
+    .from('ownership_transfers')
+    .select('*')
+    .eq('token', token)
+    .eq('accepted', false)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+export async function acceptTransfer(
+  token: string,
+  newOwnerId: string
+): Promise<{ car: Car; permission: any }> {
+  // Get the transfer
+  const transfer = await getTransferByToken(token);
+  if (!transfer) {
+    throw new Error('Transfer not found or already accepted');
+  }
+
+  // Mark transfer as accepted
+  const { error: updateError } = await supabase
+    .from('ownership_transfers')
+    .update({ 
+      accepted: true, 
+      accepted_at: new Date().toISOString() 
+    })
+    .eq('id', transfer.id);
+
+  if (updateError) throw updateError;
+
+  // Add car_permission for the new owner
+  const { data: permission, error: permError } = await supabase
+    .from('car_permissions')
+    .insert({
+      car_id: transfer.car_id,
+      user_id: newOwnerId,
+      role: 'owner',
+      granted_by: transfer.seller_id,
+    })
+    .select()
+    .single();
+
+  if (permError) throw permError;
+
+  // Get car details
+  const car = await getCarById(transfer.car_id);
+  if (!car) {
+    throw new Error('Car not found');
+  }
+
+  return { car, permission };
+}
+
+export async function getCarPermissions(carId: string) {
+  const { data, error } = await supabase
+    .from('car_permissions')
+    .select('*')
+    .eq('car_id', carId);
+
+  if (error) throw error;
+  return data || [];
 }

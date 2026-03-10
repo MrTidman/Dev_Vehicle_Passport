@@ -5,8 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
-import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder } from '../lib/cars';
-import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check } from 'lucide-react';
+import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership } from '../lib/cars';
+import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send } from 'lucide-react';
 
 // Service Record Form Schema
 const serviceRecordSchema = z.object({
@@ -31,12 +31,21 @@ const reminderSchema = z.object({
 
 type ReminderFormData = z.infer<typeof reminderSchema>;
 
+// Transfer Form Schema
+const transferSchema = z.object({
+  newOwnerEmail: z.string().email('Valid email is required'),
+});
+
+type TransferFormData = z.infer<typeof transferSchema>;
+
 export function CarDetail() {
   const { id: carId } = useParams<{ id: string }>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [showReminderForm, setShowReminderForm] = useState(false);
+  const [showTransferForm, setShowTransferForm] = useState(false);
+  const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
 
   // Fetch car details
   const { data: car, isLoading: carLoading, error: carError } = useQuery({
@@ -85,6 +94,15 @@ export function CarDetail() {
     },
   });
 
+  // Transfer ownership mutation
+  const transferMutation = useMutation({
+    mutationFn: (data: TransferFormData) => transferOwnership(carId!, data.newOwnerEmail, user!.id),
+    onSuccess: (data) => {
+      setTransferSuccess(`Transfer initiated! Email link: ${data.emailLink}`);
+      setShowTransferForm(false);
+    },
+  });
+
   // Service record form
   const serviceForm = useForm<ServiceRecordFormData>({
     resolver: zodResolver(serviceRecordSchema),
@@ -99,6 +117,14 @@ export function CarDetail() {
     defaultValues: {
       reminder_type: 'service',
       due_date: new Date().toISOString().split('T')[0],
+    },
+  });
+
+  // Transfer form
+  const transferForm = useForm<TransferFormData>({
+    resolver: zodResolver(transferSchema),
+    defaultValues: {
+      newOwnerEmail: '',
     },
   });
 
@@ -162,6 +188,81 @@ export function CarDetail() {
             <p className="text-sm text-slate-500">VIN: {car.vin}</p>
           </div>
         )}
+
+        {/* Transfer Button */}
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <button
+            onClick={() => setShowTransferForm(!showTransferForm)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            Transfer Ownership
+          </button>
+
+          {/* Transfer Form */}
+          {showTransferForm && (
+            <div className="mt-4 p-4 bg-slate-900/50 border border-slate-600 rounded-lg">
+              <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                <Send className="w-4 h-4" />
+                Transfer Vehicle Ownership
+              </h3>
+              
+              {transferSuccess && (
+                <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                  <p className="text-emerald-400 text-sm break-all">{transferSuccess}</p>
+                </div>
+              )}
+
+              <form
+                onSubmit={transferForm.handleSubmit((data) => transferMutation.mutate(data))}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    New Owner's Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="email"
+                      {...transferForm.register('newOwnerEmail')}
+                      placeholder="Enter email address"
+                      className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                    />
+                  </div>
+                  {transferForm.formState.errors.newOwnerEmail && (
+                    <p className="text-red-400 text-xs mt-1">
+                      {transferForm.formState.errors.newOwnerEmail.message}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={transferMutation.isPending}
+                    className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {transferMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                    ) : (
+                      'Send Transfer Request'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTransferForm(false);
+                      setTransferSuccess(null);
+                    }}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
 
       {isLoading ? (

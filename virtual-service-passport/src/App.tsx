@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import { CarDetail } from './pages/CarDetail';
 import { AddCar } from './pages/AddCar';
 import { Settings } from './pages/Settings';
+import { Transfer } from './pages/Transfer';
 import { AuthProvider, useAuth } from './lib/auth';
 import { Settings as SettingsIcon, LogOut, Car, Loader2 } from 'lucide-react';
 
@@ -141,6 +142,9 @@ function App() {
               <Route path="/cars/new" element={<AddCar />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
+
+            {/* Public transfer route - no auth required */}
+            <Route path="/transfer/:token" element={<Transfer />} />
 
             {/* Catch-all redirect */}
             <Route path="*" element={<Navigate to="/" replace />} />
