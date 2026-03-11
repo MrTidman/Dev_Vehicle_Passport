@@ -188,6 +188,7 @@ export async function addServiceRecord(
     mileage?: number;
     cost?: number;
     garage_name?: string;
+    receipts?: string[];
   },
   userId: string
 ): Promise<ServiceRecord> {
@@ -208,6 +209,7 @@ export async function addServiceRecord(
       mileage: record.mileage || null,
       cost: record.cost || null,
       garage_name: record.garage_name || null,
+      receipts: record.receipts || null,
     })
     .select()
     .single();

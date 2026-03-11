@@ -7,6 +7,9 @@ import { z } from 'zod';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, updateCarNotes } from '../lib/cars';
+import { uploadVehicleFiles } from '../lib/storage';
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send, FileText, Edit2, Save, X, Upload, File } from 'lucide-react';
 
 // Service Record Form Schema
@@ -17,6 +20,7 @@ const serviceRecordSchema = z.object({
   mileage: z.number().min(0).max(999999).optional(),
   cost: z.number().min(0).max(999999).optional(),
   garage_name: z.string().max(255).optional(),
+  receipts: z.array(z.string()).optional(),
 });
 
 type ServiceRecordFormData = z.infer<typeof serviceRecordSchema>;
@@ -50,6 +54,8 @@ export function CarDetail() {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch car details
   const { data: car, isLoading: carLoading, error: carError } = useQuery({
@@ -430,7 +436,23 @@ export function CarDetail() {
             {/* Add Service Record Form */}
             {showServiceForm && (
               <form
-                onSubmit={serviceForm.handleSubmit((data) => addServiceMutation.mutate(data))}
+                onSubmit={serviceForm.handleSubmit(async (data) => {
+                  setIsUploading(true);
+                  try {
+                    let receipts: string[] = [];
+                    
+                    // Upload files if any
+                    if (uploadedFiles.length > 0 && carId && user) {
+                      receipts = await uploadVehicleFiles(uploadedFiles, carId, user.id);
+                    }
+                    
+                    await addServiceMutation.mutateAsync({ ...data, receipts });
+                    setUploadedFiles([]);
+                    setFileError(null);
+                  } finally {
+                    setIsUploading(false);
+                  }
+                })}
                 className="mb-6 p-4 bg-slate-900/50 border border-slate-600 rounded-lg space-y-4"
               >
                 <div className="grid grid-cols-2 gap-4">
@@ -513,7 +535,23 @@ export function CarDetail() {
                       className="hidden"
                       onChange={(e) => {
                         const files = Array.from(e.target.files || []);
-                        setUploadedFiles(prev => [...prev, ...files]);
+                        const validFiles: File[] = [];
+                        let errorMsg: string | null = null;
+                        
+                        for (const file of files) {
+                          if (file.size > MAX_FILE_SIZE) {
+                            errorMsg = `File "${file.name}" exceeds 10MB limit`;
+                            break;
+                          }
+                          validFiles.push(file);
+                        }
+                        
+                        if (errorMsg) {
+                          setFileError(errorMsg);
+                        } else {
+                          setFileError(null);
+                          setUploadedFiles(prev => [...prev, ...validFiles]);
+                        }
                       }}
                     />
                     <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2">
@@ -526,6 +564,13 @@ export function CarDetail() {
                       </span>
                     </label>
                   </div>
+                  
+                  {/* File upload error */}
+                  {fileError && (
+                    <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <p className="text-red-400 text-xs">{fileError}</p>
+                    </div>
+                  )}
                   
                   {/* Uploaded Files List */}
                   {uploadedFiles.length > 0 && (
@@ -555,10 +600,10 @@ export function CarDetail() {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    disabled={addServiceMutation.isPending}
+                    disabled={addServiceMutation.isPending || isUploading}
                     className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                   >
-                    {addServiceMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save'}
+                    {addServiceMutation.isPending || isUploading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save'}
                   </button>
                   <button
                     type="button"
