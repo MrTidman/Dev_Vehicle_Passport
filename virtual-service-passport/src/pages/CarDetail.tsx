@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -12,10 +12,10 @@ import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserP
 const serviceRecordSchema = z.object({
   service_date: z.string().min(1, 'Service date is required'),
   service_type: z.string().optional(),
-  description: z.string().optional(),
-  mileage: z.number().optional(),
-  cost: z.number().optional(),
-  garage_name: z.string().optional(),
+  description: z.string().max(5000).optional(),
+  mileage: z.number().min(0).max(999999).optional(),
+  cost: z.number().min(0).max(999999).optional(),
+  garage_name: z.string().max(255).optional(),
 });
 
 type ServiceRecordFormData = z.infer<typeof serviceRecordSchema>;
@@ -23,8 +23,8 @@ type ServiceRecordFormData = z.infer<typeof serviceRecordSchema>;
 // Reminder Form Schema
 const reminderSchema = z.object({
   reminder_type: z.enum(['MOT', 'tax', 'insurance', 'service', 'custom']),
-  title: z.string().optional(),
-  description: z.string().optional(),
+  title: z.string().max(255).optional(),
+  description: z.string().max(5000).optional(),
   due_date: z.string().min(1, 'Due date is required'),
   repeat_interval: z.enum(['yearly', '6month', '3month', 'monthly']).optional(),
 });
@@ -49,23 +49,23 @@ export function CarDetail() {
 
   // Fetch car details
   const { data: car, isLoading: carLoading, error: carError } = useQuery({
-    queryKey: ['car', carId],
-    queryFn: () => getCarById(carId!),
-    enabled: !!carId,
+    queryKey: ['car', carId, user?.id],
+    queryFn: () => getCarById(carId!, user!.id),
+    enabled: !!carId && !!user,
   });
 
   // Fetch service records
   const { data: serviceRecords, isLoading: servicesLoading } = useQuery({
-    queryKey: ['serviceRecords', carId],
-    queryFn: () => getServiceRecords(carId!),
-    enabled: !!carId,
+    queryKey: ['serviceRecords', carId, user?.id],
+    queryFn: () => getServiceRecords(carId!, user!.id),
+    enabled: !!carId && !!user,
   });
 
   // Fetch reminders
   const { data: reminders, isLoading: remindersLoading } = useQuery({
-    queryKey: ['reminders', carId],
-    queryFn: () => getReminders(carId!),
-    enabled: !!carId,
+    queryKey: ['reminders', carId, user?.id],
+    queryFn: () => getReminders(carId!, user!.id),
+    enabled: !!carId && !!user,
   });
 
   // Add service record mutation
@@ -88,7 +88,7 @@ export function CarDetail() {
 
   // Complete reminder mutation
   const completeReminderMutation = useMutation({
-    mutationFn: completeReminder,
+    mutationFn: (reminderId: string) => completeReminder(reminderId, user!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reminders', carId] });
     },
@@ -128,6 +128,13 @@ export function CarDetail() {
     },
   });
 
+  // Memoize the "due soon" threshold (30 days from now)
+  /* eslint-disable react-hooks/purity */
+  const dueSoonThreshold = useMemo(() => {
+    return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  }, []);
+  /* eslint-enable react-hooks/purity */
+
   if (carLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -150,6 +157,24 @@ export function CarDetail() {
       </div>
     );
   }
+
+  // Calculate service stats
+  const serviceStats = serviceRecords
+    ? {
+        totalSpent: serviceRecords.reduce((sum, record) => sum + (record.cost || 0), 0),
+        serviceCount: serviceRecords.length,
+      }
+    : null;
+
+  // Currency formatter
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
   const isLoading = servicesLoading || remindersLoading;
 
@@ -188,6 +213,34 @@ export function CarDetail() {
             <p className="text-sm text-slate-500">VIN: {car.vin}</p>
           </div>
         )}
+
+        {/* Quick Stats */}
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <h3 className="text-sm font-medium text-slate-400 mb-3">Quick Stats</h3>
+          {servicesLoading ? (
+            <div className="flex items-center gap-2 text-slate-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Loading stats...</span>
+            </div>
+          ) : serviceStats ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Total Spent</p>
+                <p className="text-xl font-semibold text-emerald-400">
+                  {formatCurrency(serviceStats.totalSpent)}
+                </p>
+              </div>
+              <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Services</p>
+                <p className="text-xl font-semibold text-white">
+                  {serviceStats.serviceCount}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Unable to load stats</p>
+          )}
+        </div>
 
         {/* Transfer Button */}
         <div className="mt-4 pt-4 border-t border-slate-700">
@@ -526,7 +579,7 @@ export function CarDetail() {
               <div className="space-y-3">
                 {reminders.map((reminder) => {
                   const isOverdue = new Date(reminder.due_date) < new Date() && !reminder.completed;
-                  const isDueSoon = !isOverdue && new Date(reminder.due_date) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) && !reminder.completed;
+                  const isDueSoon = !isOverdue && new Date(reminder.due_date) <= dueSoonThreshold && !reminder.completed;
                   
                   return (
                     <div
