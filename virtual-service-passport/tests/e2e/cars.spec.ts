@@ -38,7 +38,6 @@ test.describe('Cars', () => {
     await page.fill('input[id="model"]', 'Camry');
     await page.fill('input[id="year"]', '2022');
     await page.selectOption('select[id="fuel_type"]', 'Petrol');
-    await page.fill('input[id="engine_cc"]', '2000');
     await page.fill('input[id="colour"]', 'Silver');
     
     // Submit form
