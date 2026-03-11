@@ -76,6 +76,19 @@ export async function addNoteToJournal(
   content: string,
   userId: string
 ): Promise<NoteJournal> {
+  // Permission check - user must have owner permission on this car
+  const { data: permission } = await supabase
+    .from('car_permissions')
+    .select('permission')
+    .eq('car_id', carId)
+    .eq('user_id', userId)
+    .eq('permission', 'owner')
+    .single();
+
+  if (!permission) {
+    throw new Error('Only owners can add note journal entries');
+  }
+
   const { data, error } = await supabase
     .from('note_journal')
     .insert({
