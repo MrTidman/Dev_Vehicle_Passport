@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval, CarPermission } from '../types';
+import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval, CarPermission, NoteJournal } from '../types';
 
 function generateToken(length: number = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -64,7 +64,60 @@ export async function updateCarNotes(
     .single();
 
   if (error) throw error;
+
+  // Add note to journal
+  await addNoteToJournal(carId, notes, userId);
+
   return data;
+}
+
+export async function addNoteToJournal(
+  carId: string,
+  content: string,
+  userId: string
+): Promise<NoteJournal> {
+  // Permission check - user must have owner permission on this car
+  const { data: permission } = await supabase
+    .from('car_permissions')
+    .select('permission')
+    .eq('car_id', carId)
+    .eq('user_id', userId)
+    .eq('permission', 'owner')
+    .single();
+
+  if (!permission) {
+    throw new Error('Only owners can add note journal entries');
+  }
+
+  const { data, error } = await supabase
+    .from('note_journal')
+    .insert({
+      car_id: carId,
+      user_id: userId,
+      content,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as NoteJournal;
+}
+
+export async function getNoteHistory(carId: string, userId: string): Promise<NoteJournal[]> {
+  // Check user has permission to access this car
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) {
+    throw new Error('Access denied: You do not have permission to view this car');
+  }
+
+  const { data, error } = await supabase
+    .from('note_journal')
+    .select('*, user:user_id(email, name)')
+    .eq('car_id', carId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
 }
 
 export async function getUserCars(userId: string): Promise<Car[]> {
