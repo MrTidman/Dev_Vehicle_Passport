@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
-import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, updateCarNotes } from '../lib/cars';
+import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, updateCarNotes, getNoteHistory } from '../lib/cars';
 import { uploadVehicleFiles } from '../lib/storage';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -52,6 +52,7 @@ export function CarDetail() {
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [showNoteHistory, setShowNoteHistory] = useState(false);
   const [notesText, setNotesText] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -95,6 +96,13 @@ export function CarDetail() {
     enabled: !!carId && !!user,
   });
 
+  // Fetch note history
+  const { data: noteHistory } = useQuery({
+    queryKey: ['noteHistory', carId, user?.id],
+    queryFn: () => getNoteHistory(carId!, user!.id),
+    enabled: !!carId && !!user && showNoteHistory,
+  });
+
   // Add service record mutation
   const addServiceMutation = useMutation({
     mutationFn: (data: ServiceRecordFormData) => addServiceRecord({ ...data, car_id: carId! }, user!.id),
@@ -135,6 +143,7 @@ export function CarDetail() {
     mutationFn: (notes: string) => updateCarNotes(carId!, notes, user!.id),
     onSuccess: (updatedCar) => {
       queryClient.setQueryData(['car', carId, user?.id], updatedCar);
+      queryClient.invalidateQueries({ queryKey: ['noteHistory', carId] });
       setIsEditingNotes(false);
     },
   });
@@ -304,6 +313,36 @@ export function CarDetail() {
             <p className="text-sm text-slate-500 italic">No notes yet. Click edit to add notes.</p>
           ) : (
             <p className="text-sm text-slate-500 italic">No notes</p>
+          )}
+
+          {/* Note History */}
+          {noteHistory && noteHistory.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-700">
+              <button
+                onClick={() => setShowNoteHistory(!showNoteHistory)}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                <FileText className="w-3 h-3" />
+                {showNoteHistory ? 'Hide' : 'Show'} note history ({noteHistory.length})
+              </button>
+              {showNoteHistory && (
+                <div className="mt-3 space-y-2">
+                  {noteHistory.map((entry) => (
+                    <div key={entry.id} className="p-2 bg-slate-900/50 border border-slate-700 rounded text-xs">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-400">
+                          {entry.user?.name || entry.user?.email || 'Unknown'}
+                        </span>
+                        <span className="text-slate-500">
+                          {new Date(entry.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-slate-300 whitespace-pre-wrap">{entry.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -653,6 +692,17 @@ export function CarDetail() {
                       </div>
                       {record.cost && (
                         <span className="text-emerald-400 font-medium">£{record.cost.toFixed(2)}</span>
+                      )}
+                      {record.receipts && record.receipts.length > 0 && (
+                        <a
+                          href={record.receipts[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 transition-colors mt-1"
+                        >
+                          <File className="w-3 h-3" />
+                          Receipt
+                        </a>
                       )}
                     </div>
                   </div>

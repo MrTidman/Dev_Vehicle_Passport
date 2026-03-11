@@ -92,6 +92,16 @@ export interface Notification {
   created_at: string;
 }
 
+export interface NoteJournal {
+  id: string;
+  car_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  // Joined fields
+  user?: User;
+}
+
 // Dashboard view types
 export interface CarWithPermission extends Car {
   permission: CarPermission;
