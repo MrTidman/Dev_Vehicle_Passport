@@ -1,5 +1,3 @@
-import { Car as CarIcon } from 'lucide-react';
-
 interface TaxDiskProps {
   shortcode: string | null;
   registration?: string | null;

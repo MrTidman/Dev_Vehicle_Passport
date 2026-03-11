@@ -696,21 +696,23 @@ export function CarDetail() {
                       {record.cost && (
                         <span className="text-emerald-400 font-medium">£{record.cost.toFixed(2)}</span>
                       )}
-                      {record.receipts && record.receipts.length > 0 && (() => {
-                          const url = record.receipts?.[0];
-                          const isSafeUrl = url && (url.startsWith('http://') || url.startsWith('https://'));
-                          return isSafeUrl ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 transition-colors mt-1"
-                            >
-                              <File className="w-3 h-3" />
-                              Receipt
-                            </a>
-                          ) : null;
-                        })()}
+                      {record.receipts && record.receipts.length > 0 && (
+                          (() => {
+                            const url = record.receipts?.[0];
+                            const isSafeUrl = url && (url.startsWith('http://') || url.startsWith('https://'));
+                            return isSafeUrl ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 transition-colors mt-1"
+                              >
+                                <File className="w-3 h-3" />
+                                Receipt
+                              </a>
+                            ) : null;
+                          })()
+                        )}
                       )}
                     </div>
                   </div>

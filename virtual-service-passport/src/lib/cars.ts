@@ -16,7 +16,7 @@ function generateToken(length: number = 32): string {
 function generateShortcode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return `VSP-${code}`;
@@ -44,8 +44,13 @@ async function getUniqueShortcode(): Promise<string> {
     attempts++;
   } while (attempts < maxAttempts);
 
-  // Fallback: use timestamp-based code if we can't find a unique one
-  return `VSP-${Date.now().toString(36).toUpperCase()}`;
+  // Fallback: use cryptographically random code if we can't find a unique one
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let fallback = '';
+  for (let i = 0; i < 8; i++) {
+    fallback += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `VSP-${fallback}`;
 }
 
 /**
