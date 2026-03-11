@@ -97,10 +97,11 @@ export async function addCar(
 
   if (carError) {
     // Handle duplicate key errors with user-friendly messages
-    if (carError.code === '23505' && carError.constraint?.includes('vin')) {
+    const errorDetails = carError.details || carError.message || '';
+    if (carError.code === '23505' && errorDetails.includes('vin')) {
       throw new Error('A car with this VIN already exists');
     }
-    if (carError.code === '23505' && carError.constraint?.includes('registration')) {
+    if (carError.code === '23505' && errorDetails.includes('registration')) {
       throw new Error('A car with this registration already exists');
     }
     throw carError;
