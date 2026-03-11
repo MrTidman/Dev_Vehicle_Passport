@@ -95,7 +95,16 @@ export async function addCar(
     .select()
     .single();
 
-  if (carError) throw carError;
+  if (carError) {
+    // Handle duplicate key errors with user-friendly messages
+    if (carError.code === '23505' && carError.constraint?.includes('vin')) {
+      throw new Error('A car with this VIN already exists');
+    }
+    if (carError.code === '23505' && carError.constraint?.includes('registration')) {
+      throw new Error('A car with this registration already exists');
+    }
+    throw carError;
+  }
 
   // Add owner permission
   const { error: permError } = await supabase
