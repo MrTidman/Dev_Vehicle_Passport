@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval } from '../types';
+import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval, CarPermission } from '../types';
 
 function generateToken(length: number = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -8,6 +8,40 @@ function generateToken(length: number = 32): string {
     token += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return token;
+}
+
+/**
+ * Check if a user has permission to access a car
+ * Returns the permission object if user has access, null otherwise
+ */
+async function checkCarPermission(carId: string, userId: string): Promise<{ role: string } | null> {
+  const { data, error } = await supabase
+    .from('car_permissions')
+    .select('role')
+    .eq('car_id', carId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data) return null;
+  return data as { role: string };
+}
+
+/**
+ * Check if user has owner or mechanic role (for write operations)
+ */
+async function checkCarWritePermission(carId: string, userId: string): Promise<boolean> {
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) return false;
+  return permission.role === 'owner' || permission.role === 'mechanic';
+}
+
+/**
+ * Check if user is the owner of a car
+ */
+async function checkCarOwnerPermission(carId: string, userId: string): Promise<boolean> {
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) return false;
+  return permission.role === 'owner';
 }
 
 export async function getUserCars(userId: string): Promise<Car[]> {
@@ -78,7 +112,13 @@ export async function addCar(
   return carData;
 }
 
-export async function getCarById(carId: string): Promise<Car | null> {
+export async function getCarById(carId: string, userId: string): Promise<Car | null> {
+  // Check user has permission to access this car
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) {
+    throw new Error('Access denied: You do not have permission to view this car');
+  }
+
   const { data, error } = await supabase
     .from('cars')
     .select('*')
@@ -90,7 +130,13 @@ export async function getCarById(carId: string): Promise<Car | null> {
 }
 
 // Service Records
-export async function getServiceRecords(carId: string): Promise<ServiceRecord[]> {
+export async function getServiceRecords(carId: string, userId: string): Promise<ServiceRecord[]> {
+  // Check user has permission to access this car
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) {
+    throw new Error('Access denied: You do not have permission to view this car');
+  }
+
   const { data, error } = await supabase
     .from('service_records')
     .select('*')
@@ -113,6 +159,12 @@ export async function addServiceRecord(
   },
   userId: string
 ): Promise<ServiceRecord> {
+  // Check user has owner or mechanic permission
+  const hasPermission = await checkCarWritePermission(record.car_id, userId);
+  if (!hasPermission) {
+    throw new Error('Access denied: You must be the owner or a mechanic to add service records');
+  }
+
   const { data, error } = await supabase
     .from('service_records')
     .insert({
@@ -133,7 +185,13 @@ export async function addServiceRecord(
 }
 
 // Reminders
-export async function getReminders(carId: string): Promise<Reminder[]> {
+export async function getReminders(carId: string, userId: string): Promise<Reminder[]> {
+  // Check user has permission to access this car
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) {
+    throw new Error('Access denied: You do not have permission to view this car');
+  }
+
   const { data, error } = await supabase
     .from('reminders')
     .select('*')
@@ -155,6 +213,12 @@ export async function addReminder(
   },
   userId: string
 ): Promise<Reminder> {
+  // Check user has owner or mechanic permission
+  const hasPermission = await checkCarWritePermission(reminder.car_id, userId);
+  if (!hasPermission) {
+    throw new Error('Access denied: You must be the owner or a mechanic to add reminders');
+  }
+
   const { data, error } = await supabase
     .from('reminders')
     .insert({
@@ -174,7 +238,24 @@ export async function addReminder(
   return data;
 }
 
-export async function completeReminder(reminderId: string): Promise<Reminder> {
+export async function completeReminder(reminderId: string, userId: string): Promise<Reminder> {
+  // First get the reminder to find the car_id
+  const { data: reminder, error: fetchError } = await supabase
+    .from('reminders')
+    .select('car_id')
+    .eq('id', reminderId)
+    .single();
+
+  if (fetchError || !reminder) {
+    throw new Error('Reminder not found');
+  }
+
+  // Check user has permission to complete reminders
+  const hasPermission = await checkCarWritePermission(reminder.car_id, userId);
+  if (!hasPermission) {
+    throw new Error('Access denied: You must be the owner or a mechanic to complete reminders');
+  }
+
   const { data, error } = await supabase
     .from('reminders')
     .update({ completed: true })
@@ -201,8 +282,14 @@ export interface OwnershipTransfer {
 export async function transferOwnership(
   carId: string,
   newOwnerEmail: string,
-  sellerId: string
+  userId: string
 ): Promise<{ transfer: OwnershipTransfer; emailLink: string }> {
+  // Check user is the owner
+  const isOwner = await checkCarOwnerPermission(carId, userId);
+  if (!isOwner) {
+    throw new Error('Access denied: Only the owner can transfer ownership');
+  }
+
   // Generate unique token
   const token = generateToken(32);
   
@@ -211,7 +298,7 @@ export async function transferOwnership(
     .from('ownership_transfers')
     .insert({
       car_id: carId,
-      seller_id: sellerId,
+      seller_id: userId,
       new_owner_email: newOwnerEmail,
       token: token,
       accepted: false,
@@ -248,11 +335,18 @@ export async function getTransferByToken(token: string): Promise<OwnershipTransf
 export async function acceptTransfer(
   token: string,
   newOwnerId: string
-): Promise<{ car: Car; permission: any }> {
+): Promise<{ car: Car; permission: CarPermission }> {
   // Get the transfer
   const transfer = await getTransferByToken(token);
   if (!transfer) {
     throw new Error('Transfer not found or already accepted');
+  }
+
+  // Verify the accepting user's email matches the transfer record
+  const { data: userData } = await supabase.auth.getUser(newOwnerId);
+  const userEmail = userData?.user?.email;
+  if (!userEmail || userEmail !== transfer.new_owner_email) {
+    throw new Error('You are not authorized to accept this transfer');
   }
 
   // Mark transfer as accepted
@@ -280,8 +374,8 @@ export async function acceptTransfer(
 
   if (permError) throw permError;
 
-  // Get car details
-  const car = await getCarById(transfer.car_id);
+  // Get car details (the new owner now has permission after previous insert)
+  const car = await getCarById(transfer.car_id, newOwnerId);
   if (!car) {
     throw new Error('Car not found');
   }

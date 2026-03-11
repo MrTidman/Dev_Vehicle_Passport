@@ -22,9 +22,9 @@ export function Transfer() {
 
   // Fetch car details
   const { data: car } = useQuery({
-    queryKey: ['car', transfer?.car_id],
-    queryFn: () => getCarById(transfer!.car_id),
-    enabled: !!transfer?.car_id,
+    queryKey: ['car', transfer?.car_id, user?.id],
+    queryFn: () => getCarById(transfer!.car_id, user!.id),
+    enabled: !!transfer?.car_id && !!user,
   });
 
   // Accept transfer mutation
@@ -37,7 +37,7 @@ export function Transfer() {
         navigate(`/car/${data.car.id}`);
       }, 3000);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       setError(err.message || 'Failed to accept transfer');
     },
   });
