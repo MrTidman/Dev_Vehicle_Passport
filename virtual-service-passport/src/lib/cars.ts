@@ -11,6 +11,44 @@ function generateToken(length: number = 32): string {
 }
 
 /**
+ * Generate a unique shortcode in format VSP-XXX (3 random alphanumeric chars)
+ */
+function generateShortcode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 3; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `VSP-${code}`;
+}
+
+/**
+ * Generate a unique shortcode that doesn't exist in the database
+ */
+async function getUniqueShortcode(): Promise<string> {
+  let shortcode: string;
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  do {
+    shortcode = generateShortcode();
+    const { data } = await supabase
+      .from('cars')
+      .select('shortcode')
+      .eq('shortcode', shortcode)
+      .single();
+    
+    if (!data) {
+      return shortcode;
+    }
+    attempts++;
+  } while (attempts < maxAttempts);
+
+  // Fallback: use timestamp-based code if we can't find a unique one
+  return `VSP-${Date.now().toString(36).toUpperCase()}`;
+}
+
+/**
  * Check if a user has permission to access a car
  * Returns the permission object if user has access, null otherwise
  */
@@ -155,6 +193,9 @@ export async function addCar(
   },
   userId: string
 ): Promise<Car> {
+  // Generate unique shortcode
+  const shortcode = await getUniqueShortcode();
+
   // Insert car
   const { data: carData, error: carError } = await supabase
     .from('cars')
@@ -166,6 +207,7 @@ export async function addCar(
       year: car.year,
       fuel_type: car.fuel_type,
       colour: car.colour || null,
+      shortcode: shortcode,
       created_by: userId,
     })
     .select()

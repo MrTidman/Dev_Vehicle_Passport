@@ -8,9 +8,10 @@ import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, updateCarNotes, getNoteHistory } from '../lib/cars';
 import { uploadVehicleFiles } from '../lib/storage';
+import { TaxDisk } from '../components/TaxDisk';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send, FileText, Edit2, Save, X, Upload, File } from 'lucide-react';
+import { Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send, FileText, Edit2, Save, X, Upload, File } from 'lucide-react';
 
 // Service Record Form Schema
 const serviceRecordSchema = z.object({
@@ -236,9 +237,11 @@ export function CarDetail() {
       <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 mb-6">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div className="p-4 bg-emerald-500/10 rounded-xl">
-              <Car className="w-10 h-10 text-emerald-400" />
-            </div>
+            <TaxDisk 
+              shortcode={car.shortcode} 
+              registration={car.registration} 
+              vin={car.vin} 
+            />
             <div>
               <h1 className="text-3xl font-bold text-white">
                 {car.make} {car.model}
