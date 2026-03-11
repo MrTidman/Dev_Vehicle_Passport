@@ -5,8 +5,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
-import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership } from '../lib/cars';
-import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, updateCarNotes } from '../lib/cars';
+import { Car, Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send, FileText, Edit2, Save, X, Upload, File } from 'lucide-react';
 
 // Service Record Form Schema
 const serviceRecordSchema = z.object({
@@ -46,6 +47,9 @@ export function CarDetail() {
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesText, setNotesText] = useState('');
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   // Fetch car details
   const { data: car, isLoading: carLoading, error: carError } = useQuery({
@@ -53,6 +57,23 @@ export function CarDetail() {
     queryFn: () => getCarById(carId!, user!.id),
     enabled: !!carId && !!user,
   });
+
+  // Fetch user's permission role for this car
+  const { data: userPermission } = useQuery({
+    queryKey: ['carPermission', carId, user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('car_permissions')
+        .select('role')
+        .eq('car_id', carId!)
+        .eq('user_id', user!.id)
+        .single();
+      return data?.role as string | null;
+    },
+    enabled: !!carId && !!user,
+  });
+
+  const isOwner = userPermission === 'owner';
 
   // Fetch service records
   const { data: serviceRecords, isLoading: servicesLoading } = useQuery({
@@ -100,6 +121,15 @@ export function CarDetail() {
     onSuccess: (data) => {
       setTransferSuccess(`Transfer initiated! Email link: ${data.emailLink}`);
       setShowTransferForm(false);
+    },
+  });
+
+  // Update notes mutation
+  const updateNotesMutation = useMutation({
+    mutationFn: (notes: string) => updateCarNotes(carId!, notes, user!.id),
+    onSuccess: (updatedCar) => {
+      queryClient.setQueryData(['car', carId, user?.id], updatedCar);
+      setIsEditingNotes(false);
     },
   });
 
@@ -213,6 +243,63 @@ export function CarDetail() {
             <p className="text-sm text-slate-500">VIN: {car.vin}</p>
           </div>
         )}
+
+        {/* Notes Section */}
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-slate-400" />
+              <h3 className="text-sm font-medium text-slate-400">Notes</h3>
+            </div>
+            {isOwner && !isEditingNotes && (
+              <button
+                onClick={() => {
+                  setNotesText(car.notes || '');
+                  setIsEditingNotes(true);
+                }}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                <Edit2 className="w-3 h-3" />
+                Edit
+              </button>
+            )}
+          </div>
+          
+          {isEditingNotes ? (
+            <div className="space-y-2">
+              <textarea
+                value={notesText}
+                onChange={(e) => setNotesText(e.target.value)}
+                placeholder="Add notes about this vehicle..."
+                rows={3}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 resize-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => updateNotesMutation.mutate(notesText)}
+                  disabled={updateNotesMutation.isPending}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-3 h-3" />
+                  {updateNotesMutation.isPending ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => setIsEditingNotes(false)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : car.notes ? (
+            <p className="text-sm text-slate-300 whitespace-pre-wrap">{car.notes}</p>
+          ) : isOwner ? (
+            <p className="text-sm text-slate-500 italic">No notes yet. Click edit to add notes.</p>
+          ) : (
+            <p className="text-sm text-slate-500 italic">No notes</p>
+          )}
+        </div>
 
         {/* Quick Stats */}
         <div className="mt-4 pt-4 border-t border-slate-700">
@@ -413,6 +500,58 @@ export function CarDetail() {
                     />
                   </div>
                 </div>
+
+                {/* Document Upload UI (Phase 2A - UI only) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Documents</label>
+                  <div className="border-2 border-dashed border-slate-600 rounded-lg p-4 text-center hover:border-slate-500 transition-colors">
+                    <input
+                      type="file"
+                      id="file-upload"
+                      multiple
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        setUploadedFiles(prev => [...prev, ...files]);
+                      }}
+                    />
+                    <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                      <Upload className="w-8 h-8 text-slate-500" />
+                      <span className="text-sm text-slate-400">
+                        Click to upload receipts or documents
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        PNG, JPG, PDF up to 10MB
+                      </span>
+                    </label>
+                  </div>
+                  
+                  {/* Uploaded Files List */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {uploadedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-slate-900 rounded-lg border border-slate-700">
+                          <div className="flex items-center gap-2 text-sm text-slate-300">
+                            <File className="w-4 h-4 text-slate-400" />
+                            <span className="truncate max-w-[200px]">{file.name}</span>
+                            <span className="text-xs text-slate-500">
+                              ({(file.size / 1024).toFixed(1)} KB)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+                            className="text-slate-400 hover:text-red-400 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -423,7 +562,10 @@ export function CarDetail() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowServiceForm(false)}
+                    onClick={() => {
+                      setShowServiceForm(false);
+                      setUploadedFiles([]);
+                    }}
                     className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     Cancel

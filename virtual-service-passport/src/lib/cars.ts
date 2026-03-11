@@ -44,6 +44,29 @@ async function checkCarOwnerPermission(carId: string, userId: string): Promise<b
   return permission.role === 'owner';
 }
 
+//Car Notes
+export async function updateCarNotes(
+  carId: string,
+  notes: string,
+  userId: string
+): Promise<Car> {
+  // Check user is the owner
+  const isOwner = await checkCarOwnerPermission(carId, userId);
+  if (!isOwner) {
+    throw new Error('Access denied: Only the owner can update notes');
+  }
+
+  const { data, error } = await supabase
+    .from('cars')
+    .update({ notes })
+    .eq('id', carId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function getUserCars(userId: string): Promise<Car[]> {
   // First get car_ids user has permissions for
   const { data: permissions, error: permError } = await supabase

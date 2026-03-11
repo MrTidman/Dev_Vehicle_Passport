@@ -16,6 +16,7 @@ export interface Car {
   fuel_type: string | null;
   engine_cc: number | null;
   colour: string | null;
+  notes: string | null;
   owner_id: string;
   created_by: string;
   created_at: string;
