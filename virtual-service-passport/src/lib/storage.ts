@@ -22,9 +22,11 @@ export async function uploadVehicleFile(
     throw new Error(`File size exceeds 10MB limit: ${file.name}`);
   }
 
-  const filePath = `${carId}/${userId}/${file.name}`;
+  // Sanitize filename to prevent path traversal
+  const sanitizedFileName = file.name.replace(/(\.\.(\/|\\)|\/|\\)/g, '_');
+  const filePath = `${carId}/${userId}/${sanitizedFileName}`;
 
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(filePath, file, {
       cacheControl: '3600',
