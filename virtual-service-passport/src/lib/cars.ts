@@ -3,9 +3,11 @@ import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval, CarPer
 
 function generateToken(length: number = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const array = new Uint32Array(length);
+  crypto.getRandomValues(array);
   let token = '';
   for (let i = 0; i < length; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
+    token += chars.charAt(array[i] % chars.length);
   }
   return token;
 }
@@ -15,9 +17,11 @@ function generateToken(length: number = 32): string {
  */
 function generateShortcode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const array = new Uint32Array(6);
+  crypto.getRandomValues(array);
   let code = '';
   for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(array[i] % chars.length);
   }
   return `VSP-${code}`;
 }
@@ -46,9 +50,11 @@ async function getUniqueShortcode(): Promise<string> {
 
   // Fallback: use cryptographically random code if we can't find a unique one
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const array = new Uint32Array(8);
+  crypto.getRandomValues(array);
   let fallback = '';
   for (let i = 0; i < 8; i++) {
-    fallback += chars.charAt(Math.floor(Math.random() * chars.length));
+    fallback += chars.charAt(array[i] % chars.length);
   }
   return `VSP-${fallback}`;
 }
@@ -122,10 +128,10 @@ export async function addNoteToJournal(
   // Permission check - user must have owner permission on this car
   const { data: permission } = await supabase
     .from('car_permissions')
-    .select('permission')
+    .select('role')
     .eq('car_id', carId)
     .eq('user_id', userId)
-    .eq('permission', 'owner')
+    .eq('role', 'owner')
     .single();
 
   if (!permission) {

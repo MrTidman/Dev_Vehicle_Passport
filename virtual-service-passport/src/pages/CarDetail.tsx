@@ -707,7 +707,6 @@ export function CarDetail() {
                             Receipt
                           </a>
                         )}
-                      )}
                     </div>
                   </div>
                 ))}
