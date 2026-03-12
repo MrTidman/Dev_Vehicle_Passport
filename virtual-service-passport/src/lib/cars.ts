@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval, CarPermission, NoteJournal } from '../types';
+import type { Car, ServiceRecord, Reminder, ReminderType, RepeatInterval, CarPermission, NoteJournal, HistoryLogEntry, HistoryEntryType } from '../types';
 
 function generateToken(length: number = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -120,6 +120,47 @@ export async function updateCarNotes(
   return data;
 }
 
+/**
+ * Add a history log entry (general purpose)
+ */
+export async function addHistoryLog(
+  carId: string,
+  userId: string,
+  content: string,
+  entryType: HistoryEntryType = 'NOTE',
+  referenceId?: string,
+  attachments?: string[]
+): Promise<HistoryLogEntry> {
+  // Check user has permission on this car
+  const { data: permission } = await supabase
+    .from('car_permissions')
+    .select('role')
+    .eq('car_id', carId)
+    .eq('user_id', userId)
+    .in('role', ['owner', 'mechanic'])
+    .single();
+
+  if (!permission) {
+    throw new Error('Only owners and mechanics can add history entries');
+  }
+
+  const { data, error } = await supabase
+    .from('note_journal')
+    .insert({
+      car_id: carId,
+      user_id: userId,
+      content,
+      entry_type: entryType,
+      reference_id: referenceId || null,
+      attachments: attachments || null,
+    })
+    .select('*, user:user_id(email, name)')
+    .single();
+
+  if (error) throw error;
+  return data as HistoryLogEntry;
+}
+
 export async function addNoteToJournal(
   carId: string,
   content: string,
@@ -144,6 +185,7 @@ export async function addNoteToJournal(
       car_id: carId,
       user_id: userId,
       content,
+      entry_type: 'NOTE',
     })
     .select()
     .single();
@@ -153,6 +195,26 @@ export async function addNoteToJournal(
 }
 
 export async function getNoteHistory(carId: string, userId: string): Promise<NoteJournal[]> {
+  // Check user has permission to access this car
+  const permission = await checkCarPermission(carId, userId);
+  if (!permission) {
+    throw new Error('Access denied: You do not have permission to view this car');
+  }
+
+  const { data, error } = await supabase
+    .from('note_journal')
+    .select('*, user:user_id(email, name)')
+    .eq('car_id', carId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Get all history log entries for a car (alias for getNoteHistory for clarity)
+ */
+export async function getHistoryLog(carId: string, userId: string): Promise<HistoryLogEntry[]> {
   // Check user has permission to access this car
   const permission = await checkCarPermission(carId, userId);
   if (!permission) {
@@ -322,6 +384,21 @@ export async function addServiceRecord(
     .single();
 
   if (error) throw error;
+
+  // Auto-log the service record to history
+  const costStr = data.cost ? ` - £${data.cost.toFixed(2)}` : '';
+  const receiptStr = data.receipts && data.receipts.length > 0 ? ` - [Receipt]` : '';
+  const content = `Service: ${data.service_type || 'Service'}${costStr} - ${new Date(data.service_date).toLocaleDateString()}${receiptStr}`;
+  
+  await addHistoryLog(
+    record.car_id,
+    userId,
+    content,
+    'SERVICE_ADDED',
+    data.id,
+    data.receipts || undefined
+  );
+
   return data;
 }
 
@@ -376,6 +453,17 @@ export async function addReminder(
     .single();
 
   if (error) throw error;
+
+  // Auto-log the reminder creation to history
+  const content = `Reminder: ${data.title || data.reminder_type}`;
+  await addHistoryLog(
+    reminder.car_id,
+    userId,
+    content,
+    'REMINDER_CREATED',
+    data.id
+  );
+
   return data;
 }
 
@@ -383,7 +471,7 @@ export async function completeReminder(reminderId: string, userId: string): Prom
   // First get the reminder to find the car_id
   const { data: reminder, error: fetchError } = await supabase
     .from('reminders')
-    .select('car_id')
+    .select('car_id, title, reminder_type')
     .eq('id', reminderId)
     .single();
 
@@ -405,6 +493,17 @@ export async function completeReminder(reminderId: string, userId: string): Prom
     .single();
 
   if (error) throw error;
+
+  // Auto-log the reminder completion to history
+  const content = `Reminder: ${reminder.title || reminder.reminder_type} - Completed`;
+  await addHistoryLog(
+    reminder.car_id,
+    userId,
+    content,
+    'REMINDER_COMPLETED',
+    reminderId
+  );
+
   return data;
 }
 

@@ -55,14 +55,35 @@
 
 - Using GitHub token for commits (MrTidman)
 - Vercel Hobby plan - public repo required
-- RLS policies currently permissive for MVP
+- RLS policies currently permissive for MVP - PRIORITY: fix before production
 - Rule: If exec fails 3x, stop and tell user
 - NEVER poll after spawning subagents - wait for completion events
 
-## Todo
+## Security Focus (March 2026)
 
-- Phase 1: Bug fixes (Sage reviewing test branch now)
-- Phase 2: Document upload
-- Phase 3: Permission management  
-- Phase 4: Email notifications
-- Fix DVLA integration (needs paid API or alternative)
+**Current Security Gaps:**
+- RLS is "permissive for MVP" - major risk before public launch
+- DVLA API key exposed (client-side) - needs Edge Function
+- No server-side validation - trust client too much
+
+**Planned Auth Change:**
+- Moving to passwordless SMS OTP (phone number → text code)
+- Via Supabase + Twilio
+- Better UX, adds identity verification
+- Cost: ~$0.008/SMS
+
+## Management Dashboard
+
+- For user to manage app without Vercel/Supabase dashboards
+- Key metrics: users, vehicles, service records, ownership transfers, errors
+- Implementation: Add `is_admin` flag to users, protect via RLS + Edge Functions
+
+## Roadmap (Revised)
+
+1. Management dashboard (simple, for user)
+2. Lock down RLS + add indexes (security first!)
+3. Document upload (Phase 2)
+4. Real DVLA integration (replace mock)
+5. Email notifications (move up - user retention)
+6. Passwordless SMS auth
+7. Fleet manager view (only if demand)

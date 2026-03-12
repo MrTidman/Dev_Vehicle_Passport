@@ -6,12 +6,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
-import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, updateCarNotes, getNoteHistory } from '../lib/cars';
+import { getCarById, getServiceRecords, addServiceRecord, getReminders, addReminder, completeReminder, transferOwnership, getHistoryLog, addHistoryLog } from '../lib/cars';
 import { uploadVehicleFiles } from '../lib/storage';
 import { TaxDisk } from '../components/TaxDisk';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-import { Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send, FileText, Edit2, Save, X, Upload, File } from 'lucide-react';
+import { Wrench, Bell, Plus, Loader2, Calendar, MapPin, Gauge, Check, UserPlus, Mail, Send, FileText, Save, X, Upload, File } from 'lucide-react';
 
 // Service Record Form Schema
 const serviceRecordSchema = z.object({
@@ -44,6 +44,13 @@ const transferSchema = z.object({
 
 type TransferFormData = z.infer<typeof transferSchema>;
 
+// Note Form Schema
+const noteSchema = z.object({
+  content: z.string().min(1, 'Note content is required').max(5000),
+});
+
+type NoteFormData = z.infer<typeof noteSchema>;
+
 export function CarDetail() {
   const { id: carId } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -51,10 +58,8 @@ export function CarDetail() {
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [showTransferForm, setShowTransferForm] = useState(false);
+  const [showAddNote, setShowAddNote] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [showNoteHistory, setShowNoteHistory] = useState(false);
-  const [notesText, setNotesText] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -98,10 +103,10 @@ export function CarDetail() {
   });
 
   // Fetch note history
-  const { data: noteHistory } = useQuery({
-    queryKey: ['noteHistory', carId, user?.id],
-    queryFn: () => getNoteHistory(carId!, user!.id),
-    enabled: !!carId && !!user && showNoteHistory,
+  const { data: historyLog } = useQuery({
+    queryKey: ['historyLog', carId, user?.id],
+    queryFn: () => getHistoryLog(carId!, user!.id),
+    enabled: !!carId && !!user,
   });
 
   // Add service record mutation
@@ -109,7 +114,17 @@ export function CarDetail() {
     mutationFn: (data: ServiceRecordFormData) => addServiceRecord({ ...data, car_id: carId! }, user!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['serviceRecords', carId] });
+      queryClient.invalidateQueries({ queryKey: ['historyLog', carId] });
       setShowServiceForm(false);
+    },
+  });
+
+  // Add note mutation
+  const addNoteMutation = useMutation({
+    mutationFn: (data: NoteFormData) => addHistoryLog(carId!, user!.id, `Note: ${data.content}`, 'NOTE'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['historyLog', carId] });
+      setShowAddNote(false);
     },
   });
 
@@ -127,6 +142,7 @@ export function CarDetail() {
     mutationFn: (reminderId: string) => completeReminder(reminderId, user!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reminders', carId] });
+      queryClient.invalidateQueries({ queryKey: ['historyLog', carId] });
     },
   });
 
@@ -136,16 +152,15 @@ export function CarDetail() {
     onSuccess: (data) => {
       setTransferSuccess(`Transfer initiated! Email link: ${data.emailLink}`);
       setShowTransferForm(false);
+      queryClient.invalidateQueries({ queryKey: ['historyLog', carId] });
     },
   });
 
-  // Update notes mutation
-  const updateNotesMutation = useMutation({
-    mutationFn: (notes: string) => updateCarNotes(carId!, notes, user!.id),
-    onSuccess: (updatedCar) => {
-      queryClient.setQueryData(['car', carId, user?.id], updatedCar);
-      queryClient.invalidateQueries({ queryKey: ['noteHistory', carId] });
-      setIsEditingNotes(false);
+  // Note form
+  const noteForm = useForm<NoteFormData>({
+    resolver: zodResolver(noteSchema),
+    defaultValues: {
+      content: '',
     },
   });
 
@@ -262,90 +277,97 @@ export function CarDetail() {
           </div>
         )}
 
-        {/* Notes Section */}
+        {/* Vehicle History Log Section */}
         <div className="mt-4 pt-4 border-t border-slate-700">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-medium text-slate-400">Notes</h3>
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-sm font-medium text-white">Vehicle History</h3>
             </div>
-            {isOwner && !isEditingNotes && (
+            {(isOwner || userPermission === 'mechanic') && (
               <button
-                onClick={() => {
-                  setNotesText(car.notes || '');
-                  setIsEditingNotes(true);
-                }}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white transition-colors"
+                onClick={() => setShowAddNote(!showAddNote)}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded transition-colors"
               >
-                <Edit2 className="w-3 h-3" />
-                Edit
+                <Plus className="w-3 h-3" />
+                Add Note
               </button>
             )}
           </div>
           
-          {isEditingNotes ? (
-            <div className="space-y-2">
+          {/* Add Note Form */}
+          {showAddNote && (
+            <form
+              onSubmit={noteForm.handleSubmit((data) => addNoteMutation.mutate(data))}
+              className="mb-4 p-3 bg-slate-900/50 border border-slate-600 rounded-lg space-y-3"
+            >
               <textarea
-                value={notesText}
-                onChange={(e) => setNotesText(e.target.value)}
-                placeholder="Add notes about this vehicle..."
-                rows={3}
+                {...noteForm.register('content')}
+                placeholder="Add a note to the vehicle history..."
+                rows={2}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 resize-none"
               />
+              {noteForm.formState.errors.content && (
+                <p className="text-red-400 text-xs">{noteForm.formState.errors.content.message}</p>
+              )}
               <div className="flex gap-2">
                 <button
-                  onClick={() => updateNotesMutation.mutate(notesText)}
-                  disabled={updateNotesMutation.isPending}
+                  type="submit"
+                  disabled={addNoteMutation.isPending}
                   className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
                 >
-                  <Save className="w-3 h-3" />
-                  {updateNotesMutation.isPending ? 'Saving...' : 'Save'}
+                  {addNoteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  Save Note
                 </button>
                 <button
-                  onClick={() => setIsEditingNotes(false)}
+                  type="button"
+                  onClick={() => setShowAddNote(false)}
                   className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors"
                 >
                   <X className="w-3 h-3" />
                   Cancel
                 </button>
               </div>
-            </div>
-          ) : car.notes ? (
-            <p className="text-sm text-slate-300 whitespace-pre-wrap">{car.notes}</p>
-          ) : isOwner ? (
-            <p className="text-sm text-slate-500 italic">No notes yet. Click edit to add notes.</p>
-          ) : (
-            <p className="text-sm text-slate-500 italic">No notes</p>
+            </form>
           )}
 
-          {/* Note History */}
-          {noteHistory && noteHistory.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-700">
-              <button
-                onClick={() => setShowNoteHistory(!showNoteHistory)}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
-              >
-                <FileText className="w-3 h-3" />
-                {showNoteHistory ? 'Hide' : 'Show'} note history ({noteHistory.length})
-              </button>
-              {showNoteHistory && (
-                <div className="mt-3 space-y-2">
-                  {noteHistory.map((entry) => (
-                    <div key={entry.id} className="p-2 bg-slate-900/50 border border-slate-700 rounded text-xs">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-slate-400">
-                          {entry.user?.name || entry.user?.email || 'Unknown'}
-                        </span>
-                        <span className="text-slate-500">
-                          {new Date(entry.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-slate-300 whitespace-pre-wrap">{entry.content}</p>
+          {/* History Log List */}
+          {historyLog && historyLog.length > 0 ? (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              {historyLog.map((entry) => (
+                <div key={entry.id} className="p-3 bg-slate-900/30 border border-slate-700 rounded-lg">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white break-words">
+                        {entry.content}
+                      </p>
+                      {entry.attachments && entry.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {entry.attachments.map((url, idx) => (
+                            <a
+                              key={idx}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                            >
+                              <File className="w-3 h-3" />
+                              Receipt
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    <div className="flex flex-col items-end text-xs text-slate-500 shrink-0">
+                      <span>{new Date(entry.created_at).toLocaleDateString('en-GB')}</span>
+                      <span>{new Date(entry.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
+          ) : (
+            <p className="text-sm text-slate-500 italic">No history yet. Services, reminders, and notes will appear here.</p>
           )}
         </div>
 
@@ -667,14 +689,14 @@ export function CarDetail() {
                 {serviceRecords.map((record) => (
                   <div key={record.id} className="p-4 bg-slate-900/50 border border-slate-700 rounded-lg">
                     <div className="flex items-start justify-between">
-                      <div>
+                      <div className="flex-1">
                         <h3 className="font-medium text-white">
                           {record.service_type || 'Service'}
                         </h3>
                         {record.description && (
                           <p className="text-sm text-slate-400 mt-1">{record.description}</p>
                         )}
-                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {new Date(record.service_date).toLocaleDateString()}
@@ -692,21 +714,27 @@ export function CarDetail() {
                             </span>
                           )}
                         </div>
+                        {/* Render receipts if available */}
+                        {record.receipts && record.receipts.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {record.receipts.map((receipt, idx) => (
+                              <a
+                                key={idx}
+                                href={receipt}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20"
+                              >
+                                <File className="w-3 h-3" />
+                                Receipt {idx + 1}
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {record.cost && (
                         <span className="text-emerald-400 font-medium">£{record.cost.toFixed(2)}</span>
                       )}
-                      {record.receipts && record.receipts.length > 0 && record.receipts[0].startsWith('http') && (
-                          <a
-                            href={record.receipts[0]}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 transition-colors mt-1"
-                          >
-                            <File className="w-3 h-3" />
-                            Receipt
-                          </a>
-                        )}
                     </div>
                   </div>
                 ))}

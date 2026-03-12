@@ -93,11 +93,31 @@ export interface Notification {
   created_at: string;
 }
 
+// History Log Entry Types
+export type HistoryEntryType = 'NOTE' | 'SERVICE_ADDED' | 'REMINDER_CREATED' | 'REMINDER_COMPLETED' | 'TRANSFER';
+
+export interface HistoryLogEntry {
+  id: string;
+  car_id: string;
+  user_id: string;
+  content: string;
+  entry_type: HistoryEntryType;
+  reference_id: string | null;  // Links to service_records.id, reminders.id, etc.
+  attachments: string[] | null;  // File URLs (receipts, etc.)
+  created_at: string;
+  // Joined fields
+  user?: User;
+  service_record?: ServiceRecord;
+}
+
 export interface NoteJournal {
   id: string;
   car_id: string;
   user_id: string;
   content: string;
+  entry_type?: HistoryEntryType;  // Added for migration
+  reference_id?: string | null;
+  attachments?: string[] | null;
   created_at: string;
   // Joined fields
   user?: User;
