@@ -74,12 +74,12 @@ export interface OwnershipTransfer {
   id: string;
   car_id: string;
   seller_id: string;
-  buyer_id: string;
-  status: TransferStatus;
+  new_owner_email: string;
   token: string;
   token_expires_at: string | null;
+  accepted: boolean;
   created_at: string;
-  completed_at: string | null;
+  accepted_at?: string;
 }
 
 export type NotificationType = 'reminder' | 'transfer' | 'service' | 'permission' | 'system';
@@ -131,4 +131,19 @@ export interface CarWithPermission extends Car {
   totalSpent?: number;
   serviceCount?: number;
   nextReminder?: Reminder;
+}
+
+// PDF Export types
+export interface CarDetails {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  registration: string;
+  vin: string;
+  currentMileage: number;
+}
+
+export interface PDFExportOptions {
+  includeReceipts?: boolean;
 }

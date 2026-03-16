@@ -10,6 +10,7 @@ import { getCarById, getServiceRecords, addServiceRecord, getReminders, addRemin
 import { uploadVehicleFiles } from '../lib/storage';
 import { downloadServiceHistoryPDF } from '../lib/pdf-export';
 import { maskVIN } from '../lib/vin';
+import { formatCurrency } from '../lib/utils';
 import { TaxDisk } from '../components/TaxDisk';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -269,16 +270,6 @@ export function CarDetail() {
         serviceCount: serviceRecords.length,
       }
     : null;
-
-  // Currency formatter
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
 
   // PDF Export handler - show mileage modal first
   const handleExportPDFClick = () => {

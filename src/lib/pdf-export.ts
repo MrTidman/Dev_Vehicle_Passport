@@ -1,7 +1,9 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { maskVIN } from './vin';
+import type { CarDetails, PDFExportOptions } from '../types';
 
+// PDF service record - uses slightly different field names for PDF generation
 interface ServiceRecord {
   id: string;
   date: string;
@@ -14,26 +16,13 @@ interface ServiceRecord {
   receipts?: string[] | null;
 }
 
-interface HistoryLogEntry {
+// PDF journal entry - uses generic string for entry_type flexibility
+interface PDFHistoryLogEntry {
   id: string;
   content: string;
   entry_type: string;
   created_at: string;
   attachments?: string[] | null;
-}
-
-interface CarDetails {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  registration: string;
-  vin: string;
-  currentMileage: number;
-}
-
-interface PDFExportOptions {
-  includeReceipts?: boolean;
 }
 
 /**
@@ -44,7 +33,7 @@ export async function generateServiceHistoryPDF(
   car: CarDetails,
   serviceRecords: ServiceRecord[],
   totalSpent: number,
-  journalEntries?: HistoryLogEntry[],
+  journalEntries?: PDFHistoryLogEntry[],
   options: PDFExportOptions = {}
 ): Promise<jsPDF> {
   const doc = new jsPDF();
@@ -433,7 +422,7 @@ export async function downloadServiceHistoryPDF(
   car: CarDetails,
   serviceRecords: ServiceRecord[],
   totalSpent: number,
-  journalEntries?: HistoryLogEntry[],
+  journalEntries?: PDFHistoryLogEntry[],
   options: PDFExportOptions = {}
 ): Promise<void> {
   const doc = await generateServiceHistoryPDF(car, serviceRecords, totalSpent, journalEntries, options);

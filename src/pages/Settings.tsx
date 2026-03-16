@@ -60,7 +60,7 @@ export function Settings() {
       
       // Reset with new value
       reset({ full_name: data.full_name });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error updating profile:', error);
     } finally {
       setIsLoading(false);
@@ -82,7 +82,7 @@ export function Settings() {
       
       setResetPasswordSent(true);
       setSuccessMessage('Password reset email sent! Check your inbox for instructions.');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error resetting password:', error);
       setSuccessMessage('Error sending reset email. Please try again.');
     } finally {
