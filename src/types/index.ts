@@ -77,6 +77,7 @@ export interface OwnershipTransfer {
   buyer_id: string;
   status: TransferStatus;
   token: string;
+  token_expires_at: string | null;
   created_at: string;
   completed_at: string | null;
 }

@@ -512,13 +512,14 @@ export async function completeReminder(reminderId: string, userId: string): Prom
   return data;
 }
 
-// Ownership Transfer
+// Ownership Transfer (keep locally for now - has different fields than the DB actual columns)
 export interface OwnershipTransfer {
   id: string;
   car_id: string;
   seller_id: string;
   new_owner_email: string;
   token: string;
+  token_expires_at: string | null;
   accepted: boolean;
   created_at: string;
   accepted_at?: string;
@@ -537,6 +538,7 @@ export async function transferOwnership(
 
   // Generate unique token
   const token = generateToken(32);
+  const tokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   
   // Save transfer request to ownership_transfers table
   const { data: transfer, error: transferError } = await supabase
@@ -546,6 +548,7 @@ export async function transferOwnership(
       seller_id: userId,
       new_owner_email: newOwnerEmail,
       token: token,
+      token_expires_at: tokenExpiresAt,
       accepted: false,
     })
     .select()
@@ -574,7 +577,7 @@ export async function getTransferByToken(token: string): Promise<OwnershipTransf
     .single();
 
   if (error) return null;
-  return data;
+  return data as OwnershipTransfer;
 }
 
 export async function acceptTransfer(
@@ -585,6 +588,11 @@ export async function acceptTransfer(
   const transfer = await getTransferByToken(token);
   if (!transfer) {
     throw new Error('Transfer not found or already accepted');
+  }
+
+  // Check if token has expired
+  if (transfer.token_expires_at && new Date(transfer.token_expires_at) < new Date()) {
+    throw new Error('This transfer link has expired. Please request a new transfer.');
   }
 
   // Verify the accepting user's email matches the transfer record
