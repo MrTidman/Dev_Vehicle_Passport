@@ -67,11 +67,6 @@ export async function transferOwnership(
   // Generate email link (for now just log it since we don't have email sending)
   const emailLink = `${window.location.origin}/transfer/${token}`;
   
-  console.log('=== OWNERSHIP TRANSFER EMAIL ===');
-  console.log(`To: ${newOwnerEmail}`);
-  console.log(`Subject: Vehicle Transfer Request`);
-  console.log(`Message: Someone wants to transfer a vehicle to you. Click here to accept: ${emailLink}`);
-  console.log('================================');
 
   return { transfer, emailLink };
 }
